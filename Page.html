@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Water Level Graph</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <h1>Water Level Monitoring</h1>
+  <canvas id="waterLevelChart" width="400" height="200"></canvas>
+  <button id="connectBtn">Connect to Arduino</button>
+
+  <script>
+    const ctx = document.getElementById('waterLevelChart').getContext('2d');
+    const waterLevelChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [], // Time data (x-axis) in seconds
+        datasets: [{
+          label: 'Water Level',
+          data: [], // Water level data (y-axis)
+          borderColor: 'rgba(75, 192, 192, 1)',
+          borderWidth: 1,
+          fill: false
+        }]
+      },
+      options: {
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Time (seconds)'
+            }
+          },
+          y: {
+            beginAtZero: true,
+            max: 600, // Imposta il massimo a 600
+            title: {
+              display: true,
+              text: 'Water Level (0-600)'
+            }
+          }
+        }
+      }
+    });
+
+    let port;
+    let reader;
+    let startTime = null; // Record the time when the connection starts
+
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+      try {
+        // Request a port and open a connection
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+
+        // Read from the serial port
+        const decoder = new TextDecoderStream();
+        const inputDone = port.readable.pipeTo(decoder.writable);
+        const inputStream = decoder.readable;
+        reader = inputStream.getReader();
+
+        // Set the start time
+        startTime = Date.now();
+
+        // Set an interval to update the graph every second
+        setInterval(async () => {
+          const { value, done } = await reader.read();
+          if (done) {
+            return; // Exit if no more data
+          }
+          if (value) {
+            const level = parseInt(value.trim());
+            const currentTime = Date.now();
+            const elapsedTime = (currentTime - startTime) / 1000; // Convert milliseconds to seconds
+            
+            // Only add valid readings to the chart
+            if (!isNaN(level) && level >= 0 && level <= 600) { // Modifica per un valore massimo di 600
+              waterLevelChart.data.labels.push(elapsedTime.toFixed(2)); // Display time in seconds
+              waterLevelChart.data.datasets[0].data.push(level);
+
+              waterLevelChart.update(); // Refresh the chart
+            }
+          }
+        }, 1000); // Update every second (1000 ms)
+      } catch (error) {
+        console.error('There was an error opening the serial port:', error);
+      }
+    });
+  </script>
+
+</body>
+</html>
